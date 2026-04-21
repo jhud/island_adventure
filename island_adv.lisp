@@ -1,8 +1,8 @@
 
 
-(defun world_env ()
+(defun create_world_env ()
   '((time . 0)
-    (player . ((x . 10) (y . 29)))
+    (player . (10 . 29))
     (map_size . (32 . 32))))
 
 (defun get_val (key alist)
@@ -10,10 +10,8 @@
 
 (defun set_val (key value alist)
   (cons (cons key value)
-        (remove key alist :key #'car)))
+        (remove key alist :key #'car :test #'eq)))
 
-(defun get_player_pos (world)
-  (get_val 'player world))
 
 ;; Get tile attributes at the given coordinates. Lisp does not really need enums, so we use symbols
 (defun tile_attributes (x y world_env)
@@ -21,8 +19,12 @@
     (let ((map_size (get_val 'map_size world_env)))
     (cond 
         ((is_tile_water x y) 'water)
-        ((< x (/ (car map_size) 1)) 'forest)
-        ((< y (/ (cdr map_size) 1)) 'plains)
+        ((is_tile_water (- x 1) y) 'cliff) 
+        ((is_tile_water (+ x 1) y) 'beach) 
+        ((is_tile_water x (+ y 1)) 'beach)     
+        ((is_tile_water x (- y 1)) 'beach)          
+        ((< x (/ (car map_size) 2)) 'forest)
+        ((< y (/ (cdr map_size) 2)) 'plains)
         ('t 'empty)
     )
     )
@@ -40,6 +42,7 @@
       (* radius radius)))
 
 (defun random_vals (num vals seed)
+  "Get num reproducible pseudorandom values, based on the seed."
   (cond
     ((> num 0)
      (let ((next (mod (+ (* 1531 seed) 919) 65535)))
@@ -49,27 +52,43 @@
     (t vals)))
 
 (defun random_2d (num radius seed)
+    "Get list of 2D values clustered withing radius."
     (pairwise (mapcar (lambda (x) (mod x radius)) (random_vals (* num 2) NIL seed)))
 )
 
 (defun is_tile_water (x y)
-    (not (some (lambda (circle) (in_circle x y (+ 8 (car circle)) (+ 9 (cdr circle)) 8)) (random_2d 9 14 25)))
+    (not (some (lambda (circle) (in_circle x y (+ 8 (car circle)) (+ 9 (cdr circle)) 9)) (random_2d 9 14 25)))
 )
 
-(defun parse_user_input (user_input)
-    (let (first_letter (car user_input))
-        (cond ((eq first_letter 'w) ) ; change x/y
-        
+(defun move_player(x_delta y_delta world_env)
+    (let ((player_pos (get_val 'player world_env)))
+        (set_val 'player (cons (+ (car player_pos) x_delta) 
+                               (+ (cdr player_pos) y_delta)) world_env)
+    )
+)
+
+(defun parse_user_input (user_input world_env)
+    (let ((first_letter (car user_input)))
+        (cond 
+            ((eq first_letter 'w) (move_player 0 -1 world_env)) 
+            ((eq first_letter 's) (move_player 0 1 world_env)) 
+            ((eq first_letter 'a) (move_player -1 0 world_env)) 
+            ((eq first_letter 'd) (move_player 1 0 world_env)) 
         )
     )
 )
 
 (defun render_world (world_env)
     (let ((map_size (get_val 'map_size world_env)))
-    (dotimes (x (car map_size))
-        (dotimes (y (cdr map_size))
+    (dotimes (y (car map_size))
+        (dotimes (x (cdr map_size))
             (princ (cdr (assoc 
-                (tile_attributes x y world_env) '((forest . ^) (plains . _) (water . w) (empty . e))
+                (tile_attributes x y world_env) '(  (forest . ^)
+                                                    (plains . _) 
+                                                    (water . w) 
+                                                    (empty . e) 
+                                                    (beach . b) 
+                                                    (cliff . c))
             ))
             )
         )
@@ -79,13 +98,20 @@
 )
 
 (defun main_loop ()
-    (let ((user_input (read-line)))
-        (parse_user_input user_input)
+    (let ((world (create_world_env)))
+        (loop
+            (format t "~&> ")
+            (let ((user_input (read-line)))
+                (when (string-equal user_input "quit")
+                    (return))
+                (parse_user_input user_input world)
+            )
+        )
     )
 )
 
 
-(render_world (make_world))
+(render_world (create_world_env))
 
 (main_loop)
 
